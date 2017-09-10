@@ -16,7 +16,9 @@ class UserClient {
         http = HttpBuilder.configure {
             request.uri = host
             request.encoder JSON, NativeHandlers.Encoders.&json
-            response.parser JSON, UserClient.&parseJson
+            response.parser JSON, { ChainedHttpConfig config, FromServer fs ->
+                json(config, fs) as User
+            }
         }
     }
 
@@ -66,9 +68,5 @@ class UserClient {
                 throw new IllegalArgumentException()
             }
         }
-    }
-
-    private static final User parseJson(ChainedHttpConfig config, FromServer fs) {
-        json(config, fs) as User
     }
 }

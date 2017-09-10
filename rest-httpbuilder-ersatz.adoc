@@ -133,131 +133,277 @@ List<User> retrieveAll() {
 }
 ----
 
-This method will make a `GET` request to the `/users` path on the configured host.
+This method will make a `GET` request to the `/users` path on the configured host. Note that we also need to configure a parser to handle the incoming
+response data, which is a list of `User` objects serialized as JSON.
 
+Now, if we go back and run our test, we get a nasty error about parsing JSON content on the Ersatz Server side:
 
+----
+groovy.json.JsonException: Unable to determine the current character, it is not a string, number, array, or object
 
-need the encoder
+The current character read is 'r' with an int value of 114
+Unable to determine the current character, it is not a string, number, array, or object
+line number 1
+index number 1
+[restdev.User(100, abe, abe@example.com), restdev.User(200, bob, bob@example.com), restdev.User(300, chuck, chuck@example.com)]
+----
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Now we can start at the top, working through the `GET /users` endpoint. Let's setup the basic happy-path case of calling the
-endpoint and getting back a list of users. We need a list of users to return:
+This means we need to add an `encoder` to the Ersatz Server configuration so that it knows how to encode the response it is sending back - in this case
+it will serialize a list of `User` objects as JSON to be sent as the response. We can configure this on the `ErsatzServer` constructor as:
 
 [source,groovy]
+.UserClientSpec.groovy
 ----
-List<User> users = [
-    new User(100, 'abe', 'abe@example.com'),
-    new User(200, 'bob', 'bob@example.com'),
-    new User(300, 'chuck', 'chuck@example.com')
-]
+@AutoCleanup('stop')
+private final ErsatzServer server = new ErsatzServer({
+    encoder(APPLICATION_JSON, List) { input ->
+        "[${input.collect { i -> toJson(i) }.join(', ')}]"
+    }
+})
 ----
 
-then we need an end point simulation to return the list:
+I just used the `groovy.json.JsonOutput.toJson(Object)` method for simplicity. Now, when we run the test it succeeds. At this point we have implemented
+and tested our client against a real endpoint. I say real because Ersatz creates an instance of an embedded http://undertow.io[Undertow] server and
+configures the expected endpoints on it. The client code is hitting a real and standard web server with all of the expected server behavior. What
+you do have to be careful of with this kind of testing is that the contract with the other team does not change. This mocked testing is only as good
+as the configured expectations and if left unmaintained could drift far from the reality of the production endpoints - something to be aware of.
+
+But we have other endpoints to define and clients to implement. Next, we will handle the single user retrieval case, the `retrieve(long)` method
+(`GET /users/{id}`). Our test for this method looks very similar to the first test:
 
 [source,groovy]
+.UserClientSpec.groovy
 ----
-server.expectations {
-    get('/users').responder {
-        code 200
-        content users, ContentType.APPLICATION_JSON
+def 'retrieve'() {
+    setup:
+    User user = new User(42, 'somebody', 'somebody@example.com')
+
+    server.expectations {
+        get('/users/42').called(1).responder {
+            code 200
+            content user, APPLICATION_JSON
+        }
+    }
+
+    UserClient client = new UserClient(server.httpUrl)
+
+    when:
+    User result = client.retrieve(42)
+
+    then:
+    result == user
+
+    and:
+    server.verify()
+}
+----
+
+Notice that in this case, we are configuring only a single user in the response. Learning from our last test, we know that we will also need to
+configure an encoder to handle single `User` objects. This one is even simpler and makes our constructor look like:
+
+[source,groovy]
+.UserClientSpec.groovy
+----
+@AutoCleanup('stop')
+private final ErsatzServer server = new ErsatzServer({
+    encoder APPLICATION_JSON, User, Encoders.json
+    encoder(APPLICATION_JSON, List) { input ->
+        "[${input.collect { i -> toJson(i) }.join(', ')}]"
+    }
+})
+----
+
+For the single object case we just define the default JSON encoder. Ersatz takes the stance that if you need/want encoders and decoders you need to
+configure them rather than having them provided out of the box. It keeps the configuration less surprising and more explicit.
+
+The client code for the `GET /users/{id}` endpoint is as follows:
+
+[source,groovy]
+.UserClient.groovy
+----
+User retrieve(final long userId) {
+    http.get(User) {
+        request.uri.path = "/users/${userId}"
     }
 }
 ----
 
-This bit of Erstaz code defines a request expectation (or matcher) such that a `GET` request is expected with the path `/users`,
-which when matched, will respond with a status code of `200` and the list of users as a JSON-formatted string of response content.
-
-Now that we have a test, we can code our client. We will be using the http://stehno.com[HttpBuilder-NG] library to code our client
-impelentation, at least the part that actually hits the endpoints.
-
-The `HttpBuilder` instance may be reused across multiple request, so we configure it on its own:
+which along the same lines as our first client method, we will need to add a response parser for deserializing the incoming JSON response. We can
+configure shared response parsers in the main `HttpBuilder.configure()` method that we have in our constructor, so that they will be available to all
+HTTP method calls. The client constructor now looks like:
 
 [source,groovy]
+.UserClient.groovy
 ----
-HttpBuilder http = HttpBuilder.configure {
-    request.uri = server.httpUrl
+UserClient(final String host) {
+    http = HttpBuilder.configure {
+        request.uri = host
+        response.parser JSON, { ChainedHttpConfig config, FromServer fs ->
+            json(config, fs) as User
+        }
+    }
 }
 ----
 
-Note that the base URI is for our configured Ersatz Server instance.
+This uses the `NativeHandlers.Parsers.json` method and casts it as a `User` object to satisfy our object typing.
 
-and then implement the client request with:
+When we run our tests again, we see that they are both successful. That's enough for the `GET` requests, let's move on to something different. The
+`POST /users <user>` endpoint is tests as the others are:
 
 [source,groovy]
+.UserClientSpec.groovy
 ----
-List<User> results = http.get(List){
-    request.uri.path = '/users'
-    // probably need to add decoder here
+def 'create'() {
+    setup:
+    User inputUser = new User(null, 'somebody', 'somebody@example.com')
+    User createdUser = new User(42, inputUser.username, inputUser.email)
+
+    server.expectations {
+        post('/users') {
+            called 1
+            body inputUser, APPLICATION_JSON
+            responder {
+                code 200
+                content createdUser, APPLICATION_JSON
+            }
+        }
+    }
+
+    UserClient client = new UserClient(server.httpUrl)
+
+    when:
+    User result = client.create(inputUser)
+
+    then:
+    result == createdUser
+
+    and:
+    server.verify()
 }
 ----
 
-and now you have your client implementation hitting a real server with mocked data. That is one of the key design points around
-the Ersatz server - it's a real production-grade web server, it's just got a flexible configuration interface on top of it which
-allows you to define your requests and responses as desired.
-
-
-
-
-
-
-// FIXME: need to run through these examples in real code
+In this case we are expecting a `POST` method with a `User` as the body content, serialized as JSON. When the request is successful we respond with
+the user data which also includes the id. To decode the incoming request content we need to add a `decoder` to the `ErsatzServer` constructor:
 
 [source,groovy]
+.UserClientSpec.groovy
 ----
-ErsatzServer server = new ErsatzServer({
-    autoStart()
+@AutoCleanup('stop')
+private final ErsatzServer server = new ErsatzServer({
+    encoder APPLICATION_JSON, User, Encoders.json
+    encoder(APPLICATION_JSON, List) { input ->
+        "[${input.collect { i -> toJson(i) }.join(', ')}]"
+    }
+
+    decoder(APPLICATION_JSON) { byte[] bytes, DecodingContext dc ->
+        Decoders.parseJson.apply(bytes, dc) as User
+    }
 })
+----
 
-server.expectations {
-    // GET /users - list all users
-    get('/users').responds().code(200).content([
-        new User(100, 'Abe'), new User(200, 'Bob'), new User(300, 'Chuck')
-    ], ContentType.JSON)
+For the most part it is just the provided JSON decoder with the result cast as a `User` object. Now, for our client implementation
 
-    // GET /users/{id} - get specific user
-    get( variablePath('/users/{id}', id:isNumberString() ).responds().code(200).content(user, ContentType.JSON)
-
-    // POST /users <user> - create new user
-    post('/users').body(user).responds().code(200).content(createdUser, ContentType.JSON)
-
-    // PUT /users/{id} <user> - update existing user
-    put( variablePath('/users/{id}', id:isNumberString()) ).responds().code(200).content(updatedUser, ContentType.JSON)
-
-    // DELETE /users/{id} - delete a user
-    delete( variablePath('/users/{id}', id:isNumberString()) ).responds().code(200)
+[source,groovy]
+.UserClient.groovy
+----
+User create(final User user) {
+    http.post(User) {
+        request.uri.path = '/users'
+        request.body = user
+        request.contentType = JSON[0]
+    }
 }
 ----
 
-assuming we have a `User` object defined for our code.
+We just use the `post()` method and configure the request body content, which we will need a means of encoding into the outbound JSON format. Our client
+constructor now becomes:
 
+[source,groovy]
+.UserClient.groovy
+----
+UserClient(final String host) {
+    http = HttpBuilder.configure {
+        request.uri = host
+        request.encoder JSON, NativeHandlers.Encoders.&json
+        response.parser JSON, { ChainedHttpConfig config, FromServer fs ->
+            json(config, fs) as User
+        }
+    }
+}
+----
 
+For the encoder, we can use the one provided with the library. Run the tests again and we see that everything is green.
 
+I am going to skip the description of the user update method and its test. They are basically the same as those for the create functionality. The
+`DELETE /users/{id}` endpoint provides a few different concepts, at least on the client side. We will flip the order with this one and show the
+client implementation first:
 
-ADD TO ERSATZ
+[source,groovy]
+.UserClient.groovy
+----
+boolean delete(final long userId) {
+    http.delete {
+        request.uri.path = "/users/$userId"
+        response.success {
+            true
+        }
+        response.failure {
+            throw new IllegalArgumentException()
+        }
+    }
+}
+----
 
-PathMatchers variablePath('/some/{id}/and/{name}', id:matcher, name:matcher)
+Notice the `success` and `failure` handlers used here. If you get a successful response (e.g. 200), the `success` handler is called, otherwise the
+`failure` handler is called. For our implementation, we want to return `true` if the delete is successful` and throw an `IllegalArgumentException`
+if the user was not deleted - yes, it's a bit odd, but it shows a bit more functionality.
 
+In order to test this method, we need to test cases:
 
-error handling?
-interceptors to encrypt?
+[source,groovy]
+.UserClientSpec.groovy
+----
+def 'delete: successful'() {
+    setup:
+    server.expectations {
+        delete('/users/42').called(1).responds().code(200)
+    }
+
+    UserClient client = new UserClient(server.httpUrl)
+
+    when:
+    boolean result = client.delete(42)
+
+    then:
+    result
+
+    and:
+    server.verify()
+}
+
+def 'delete: failed'() {
+    setup:
+    server.expectations {
+        delete('/users/42').called(1).responds().code(500)
+    }
+
+    UserClient client = new UserClient(server.httpUrl)
+
+    when:
+    boolean result = client.delete(42)
+
+    then:
+    thrown(IllegalArgumentException)
+    !result
+
+    and:
+    server.verify()
+}
+----
+
+One tests the successful case and the other the failure case.
+
+Yes, this is a very code-rich discussion, but hopefully it was all pretty transparent about what was going on. You can find the code for both the client
+and the test in the https://github.com/cjstehno/rest-dev[rest-dev project] on GitHub.
+
+HttpBuilder-NG and Erstaz make a great team, and that's actually somewhat by design. Ersatz is what HttpBuilder-NG uses to test its own functionality.
