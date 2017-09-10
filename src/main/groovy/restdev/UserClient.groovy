@@ -24,7 +24,6 @@ class UserClient {
     List<User> retrieveAll() {
         http.get(List) {
             request.uri.path = '/users'
-            request.accept = JSON
             response.parser(JSON) { ChainedHttpConfig config, FromServer fs ->
                 json(config, fs).collect { x -> x as User }
             }
@@ -35,7 +34,6 @@ class UserClient {
     User retrieve(final long userId) {
         http.get(User) {
             request.uri.path = "/users/${userId}"
-            request.accept = JSON
         }
     }
 
@@ -43,7 +41,6 @@ class UserClient {
     User create(final User user) {
         http.post(User) {
             request.uri.path = '/users'
-            request.accept = JSON
             request.body = user
             request.contentType = JSON[0]
         }
@@ -53,7 +50,6 @@ class UserClient {
     User update(final User user) {
         http.put(User) {
             request.uri.path = "/users/${user.id}"
-            request.accept = JSON
             request.body = user
             request.contentType = JSON[0]
         }

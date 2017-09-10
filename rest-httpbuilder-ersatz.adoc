@@ -5,7 +5,14 @@ tags=blog,groovy
 status=published
 ~~~~~~
 
-define a restful interface, say between two microservices in your environment... something simple like a user management API
+This blog post is going to be a bit more self-serving than my usual posts. I will be walking through the process of implementing a REST client using
+https://http-builder-ng.github.io/http-builder-ng/[HttpBuilder-NG] (v0.18.0) and then testing it against an http://stehno.com/ersatz[Ersatz Server]
+(v1.5.0).
+
+Let's say we work in a big company that is implementing microservices. Our team is working on a service that will interface with a service being
+created by another team doing concurrent development - say they are creating an internal user management service. Our team will need to perform
+operations against their service before it actually exists. In discussions between the two teams, we have fleshed out a RESTful interface contract
+which looks something like this:
 
 ----
 GET /users - list all users, responds with list of users
@@ -15,14 +22,11 @@ PUT /users/{id} <user> - update existing user, responds with updated user
 DELETE /users/{id} - delete a user, 200 means success
 ----
 
-now we are working on the client side of this API that is being developed by another team during the same development cycle -
-it happens. so all we have is a contract for API at this point.
+Nothing shocking there, but now while they are developing the actual endpoints, you are developing a client. We need a way to simulate their user API
+in a realistic manner so we can develop with at least some level of confidence. This is one of the use cases where Ersatz Server comes in handy.
 
-We need a way to simulate their user api in a realistic manner so we can develop our client functionality. This is one of the
-use cases where the http://stehno.com/ersatz[Ersatz Server] comes in handy.
-
-We can quickly define a skeleton of the API and startup a fake server. Assuming we have a `User` object to work with on our end,
-something like:
+We can quickly define a mock for each of the end points and then write client code against it. First, we will need a `User` object. Based on our shared
+contract, the `User` looks like the following:
 
 [source,groovy]
 ----
@@ -34,12 +38,128 @@ class User {
 }
 ----
 
-First we need to setup an instance of `ErsatzServer` to work with:
+Next we need to setup a http://spockframework.org[Spock] test which will be used to simulate the API and test our client code. A basic Spock test with
+an Ersatz server is shown below (if you are not familiar with Spock, I suggest reading through the docs to get a quick feel for it before moving
+forward):
 
 [source,groovy]
+.UserClientSpec.groovy
 ----
-ErsatzServer server = new ErsatzServer({ autoStart() })
+class UserClientSpec extends Specification {
+
+    @AutoCleanup('stop')
+    private final ErsatzServer server = new ErsatzServer()
+
+}
 ----
+
+This code creates our `ErsatzServer` instance for us and registers it to be stopped after each test method.
+
+For our REST endpoints, we will just start from the top and implement the `GET /users` endpoint first.
+
+[source,groovy]
+.UserClientSpec.groovy
+----
+def 'retrieveAll'() {
+    setup:
+    List<User> users = [
+        new User(100, 'abe', 'abe@example.com'),
+        new User(200, 'bob', 'bob@example.com'),
+        new User(300, 'chuck', 'chuck@example.com')
+    ]
+
+    server.expectations {
+        get('/users').called(1).responder {
+            code 200
+            content users, APPLICATION_JSON
+        }
+    }
+
+    UserClient client = new UserClient(server.httpUrl)
+
+    when:
+    List<User> result = client.retrieveAll()
+
+    then:
+    result.size() == 3
+    result[0] == users[0]
+    result[1] == users[1]
+    result[2] == users[2]
+
+    and:
+    server.verify()
+}
+----
+
+The client method for this endpoint will be named `retrieveAll()` so, we will use that as the test name. We setup a few users that will be returned
+by the call and then configure the Ersatz expectations. The expectations are defined using a DSL to describe each expected request and then to define
+the response that request will return. In this case we are expecting a `GET` request with the path `/users` only once, which will return a status code
+of `200` and the configured list of users as a string of JSON. We then use the client object (not defined yet) to make the server call and then verify
+that we got our list of users back and that the server expectation was actually called.
+
+It seems like a significant chunk of code to drop all at once, but if you read though it, it's actually pretty straightforward.
+
+The first problem we run into when trying to run this code is that the `UserClient` class does not exist yet, so let's create that next.
+
+[source,groovy]
+.UserClient.groovy
+----
+class UserClient {
+
+    private final HttpBuilder http
+
+    UserClient(final String host) {
+        http = HttpBuilder.configure {
+            request.uri = host
+        }
+    }
+}
+----
+
+We are using HttpBuilder-NG (the core client in this case) to make the HTTP calls. It also uses a DSL for configuration. In this case we define the
+base URI to be a host that we pass in - if you look back at the test we see that it's the ErsatzServer host in that case. This will be the root of
+all requests. Now, to make our test happier, we need to implement the `retrieveAll()` method:
+
+[source,groovy]
+.UserClient.groovy
+----
+List<User> retrieveAll() {
+    http.get(List) {
+        request.uri.path = '/users'
+        response.parser(JSON) { ChainedHttpConfig config, FromServer fs ->
+            json(config, fs).collect { x -> x as User }
+        }
+    }
+}
+----
+
+This method will make a `GET` request to the `/users` path on the configured host.
+
+
+
+need the encoder
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Now we can start at the top, working through the `GET /users` endpoint. Let's setup the basic happy-path case of calling the
 endpoint and getting back a list of users. We need a list of users to return:

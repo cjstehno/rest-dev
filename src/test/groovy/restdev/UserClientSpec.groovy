@@ -47,6 +47,8 @@ class UserClientSpec extends Specification {
         then:
         result.size() == 3
         result[0] == users[0]
+        result[1] == users[1]
+        result[2] == users[2]
 
         and:
         server.verify()
