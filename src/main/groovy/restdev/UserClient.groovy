@@ -15,6 +15,8 @@ class UserClient {
     UserClient(final String host) {
         http = HttpBuilder.configure {
             request.uri = host
+            request.encoder JSON, NativeHandlers.Encoders.&json
+            response.parser JSON, UserClient.&parseJson
         }
     }
 
@@ -34,7 +36,6 @@ class UserClient {
         http.get(User) {
             request.uri.path = "/users/${userId}"
             request.accept = JSON
-            response.parser JSON, UserClient.&parseJson
         }
     }
 
@@ -45,8 +46,6 @@ class UserClient {
             request.accept = JSON
             request.body = user
             request.contentType = JSON[0]
-            request.encoder(JSON, NativeHandlers.Encoders.&json)
-            response.parser JSON, UserClient.&parseJson
         }
     }
 
@@ -57,8 +56,6 @@ class UserClient {
             request.accept = JSON
             request.body = user
             request.contentType = JSON[0]
-            request.encoder(JSON, NativeHandlers.Encoders.&json)
-            response.parser JSON, UserClient.&parseJson
         }
     }
 
