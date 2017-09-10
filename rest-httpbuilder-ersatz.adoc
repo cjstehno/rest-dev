@@ -407,3 +407,6 @@ Yes, this is a very code-rich discussion, but hopefully it was all pretty transp
 and the test in the https://github.com/cjstehno/rest-dev[rest-dev project] on GitHub.
 
 HttpBuilder-NG and Erstaz make a great team, and that's actually somewhat by design. Ersatz is what HttpBuilder-NG uses to test its own functionality.
+
+This post has only scratched the surface of the functionality provided by both libraries. Poke around their documentation and see what else you can
+do, and feature requests are always welcome.
