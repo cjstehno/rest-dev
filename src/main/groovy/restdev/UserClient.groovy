@@ -34,9 +34,7 @@ class UserClient {
         http.get(User) {
             request.uri.path = "/users/${userId}"
             request.accept = JSON
-            response.parser(JSON) { ChainedHttpConfig config, FromServer fs ->
-                json(config, fs) as User
-            }
+            response.parser JSON, UserClient.&parseJson
         }
     }
 
@@ -48,28 +46,24 @@ class UserClient {
             request.body = user
             request.contentType = JSON[0]
             request.encoder(JSON, NativeHandlers.Encoders.&json)
-            response.parser(JSON) { ChainedHttpConfig config, FromServer fs ->
-                json(config, fs) as User
-            }
+            response.parser JSON, UserClient.&parseJson
         }
     }
 
     // PUT /users/{id} <user> - update existing user, responds with updated user
-    User update(final User user){
+    User update(final User user) {
         http.put(User) {
             request.uri.path = "/users/${user.id}"
             request.accept = JSON
             request.body = user
             request.contentType = JSON[0]
             request.encoder(JSON, NativeHandlers.Encoders.&json)
-            response.parser(JSON) { ChainedHttpConfig config, FromServer fs ->
-                json(config, fs) as User
-            }
+            response.parser JSON, UserClient.&parseJson
         }
     }
 
     // DELETE /users/{id} - delete a user, 200 means success
-    boolean delete(final long userId){
+    boolean delete(final long userId) {
         http.delete {
             request.uri.path = "/users/$userId"
             response.success {
@@ -79,5 +73,9 @@ class UserClient {
                 throw new IllegalArgumentException()
             }
         }
+    }
+
+    private static final User parseJson(ChainedHttpConfig config, FromServer fs) {
+        json(config, fs) as User
     }
 }
