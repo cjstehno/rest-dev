@@ -1,0 +1,143 @@
+title=Take a REST with HttpBuilder-NG and Ersatz
+date=2017-09-06
+type=post
+tags=blog,groovy
+status=published
+~~~~~~
+
+define a restful interface, say between two microservices in your environment... something simple like a user management API
+
+----
+GET /users - list all users, responds with list of users
+GET /users/{id} - get specific user, responds with single user
+POST /users <user> - create new user, responds with created user
+PUT /users/{id} <user> - update existing user, responds with updated user
+DELETE /users/{id} - delete a user, 200 means success
+----
+
+now we are working on the client side of this API that is being developed by another team during the same development cycle -
+it happens. so all we have is a contract for API at this point.
+
+We need a way to simulate their user api in a realistic manner so we can develop our client functionality. This is one of the
+use cases where the http://stehno.com/ersatz[Ersatz Server] comes in handy.
+
+We can quickly define a skeleton of the API and startup a fake server. Assuming we have a `User` object to work with on our end,
+something like:
+
+[source,groovy]
+----
+@Canonical
+class User {
+    Long id
+    String username
+    String email
+}
+----
+
+First we need to setup an instance of `ErsatzServer` to work with:
+
+[source,groovy]
+----
+ErsatzServer server = new ErsatzServer({ autoStart() })
+----
+
+Now we can start at the top, working through the `GET /users` endpoint. Let's setup the basic happy-path case of calling the
+endpoint and getting back a list of users. We need a list of users to return:
+
+[source,groovy]
+----
+List<User> users = [
+    new User(100, 'abe', 'abe@example.com'),
+    new User(200, 'bob', 'bob@example.com'),
+    new User(300, 'chuck', 'chuck@example.com')
+]
+----
+
+then we need an end point simulation to return the list:
+
+[source,groovy]
+----
+server.expectations {
+    get('/users').responder {
+        code 200
+        content users, ContentType.APPLICATION_JSON
+    }
+}
+----
+
+This bit of Erstaz code defines a request expectation (or matcher) such that a `GET` request is expected with the path `/users`,
+which when matched, will respond with a status code of `200` and the list of users as a JSON-formatted string of response content.
+
+Now that we have a test, we can code our client. We will be using the http://stehno.com[HttpBuilder-NG] library to code our client
+impelentation, at least the part that actually hits the endpoints.
+
+The `HttpBuilder` instance may be reused across multiple request, so we configure it on its own:
+
+[source,groovy]
+----
+HttpBuilder http = HttpBuilder.configure {
+    request.uri = server.httpUrl
+}
+----
+
+Note that the base URI is for our configured Ersatz Server instance.
+
+and then implement the client request with:
+
+[source,groovy]
+----
+List<User> results = http.get(List){
+    request.uri.path = '/users'
+    // probably need to add decoder here
+}
+----
+
+and now you have your client implementation hitting a real server with mocked data. That is one of the key design points around
+the Ersatz server - it's a real production-grade web server, it's just got a flexible configuration interface on top of it which
+allows you to define your requests and responses as desired.
+
+
+
+
+
+
+// FIXME: need to run through these examples in real code
+
+[source,groovy]
+----
+ErsatzServer server = new ErsatzServer({
+    autoStart()
+})
+
+server.expectations {
+    // GET /users - list all users
+    get('/users').responds().code(200).content([
+        new User(100, 'Abe'), new User(200, 'Bob'), new User(300, 'Chuck')
+    ], ContentType.JSON)
+
+    // GET /users/{id} - get specific user
+    get( variablePath('/users/{id}', id:isNumberString() ).responds().code(200).content(user, ContentType.JSON)
+
+    // POST /users <user> - create new user
+    post('/users').body(user).responds().code(200).content(createdUser, ContentType.JSON)
+
+    // PUT /users/{id} <user> - update existing user
+    put( variablePath('/users/{id}', id:isNumberString()) ).responds().code(200).content(updatedUser, ContentType.JSON)
+
+    // DELETE /users/{id} - delete a user
+    delete( variablePath('/users/{id}', id:isNumberString()) ).responds().code(200)
+}
+----
+
+assuming we have a `User` object defined for our code.
+
+
+
+
+ADD TO ERSATZ
+
+PathMatchers variablePath('/some/{id}/and/{name}', id:matcher, name:matcher)
+
+
+error handling?
+interceptors to encrypt?
