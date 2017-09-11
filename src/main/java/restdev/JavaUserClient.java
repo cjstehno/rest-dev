@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 
 import static groovyx.net.http.ContentTypes.JSON;
 import static groovyx.net.http.NativeHandlers.Parsers.json;
+import static java.lang.String.format;
 
 public class JavaUserClient {
 
@@ -33,6 +34,19 @@ public class JavaUserClient {
                 List<Map<String, Object>> json = (List<Map<String, Object>>) json(chained, fs);
                 return json.stream().map((Function<Map<String, Object>, Object>) JavaUser::fromJson).collect(Collectors.toList());
             });
+        });
+    }
+
+    public JavaUser retrieve(final long userId) {
+        return http.get(JavaUser.class, config -> config.getRequest().getUri().setPath(format("/users/%d", userId)));
+    }
+
+    // POST /users <user> - create new user, responds with created user
+    public JavaUser create(final JavaUser user) {
+        return http.post(JavaUser.class, config -> {
+            config.getRequest().getUri().setPath("/users");
+            config.getRequest().setBody(user);
+            config.getRequest().setContentType(JSON.getAt(0));
         });
     }
 }

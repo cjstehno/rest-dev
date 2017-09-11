@@ -14,6 +14,7 @@ import static com.stehno.ersatz.ContentType.APPLICATION_JSON;
 import static com.stehno.ersatz.Decoders.getParseJson;
 import static java.util.stream.Collectors.joining;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static restdev.JavaUser.fromJson;
 
 public class JavaUserClientTest {
@@ -52,6 +53,47 @@ public class JavaUserClientTest {
         assertEquals(result.get(1), users.get(1));
         assertEquals(result.get(2), users.get(2));
 
-        server.verify();
+        assertTrue(server.verify());
+    }
+
+    @Test
+    public void retrieve() {
+        JavaUser user = new JavaUser(42L, "somebody", "somebody@example.com");
+
+        server.expectations(expects -> expects.get("/users/42").called(1).responder(response -> {
+            response.code(200);
+            response.content(user, APPLICATION_JSON);
+        }));
+
+        JavaUserClient client = new JavaUserClient(server.getHttpUrl());
+
+        JavaUser result = client.retrieve(42);
+
+        assertEquals(result, user);
+
+        assertTrue(server.verify());
+    }
+
+    @Test
+    public void create() {
+        JavaUser inputUser = new JavaUser(null, "somebody", "somebody@example.com");
+        JavaUser createdUser = new JavaUser(42L, inputUser.getUsername(), inputUser.getEmail());
+
+        server.expectations(expects -> expects.post("/users", request -> {
+            request.called(1);
+            request.body(inputUser, APPLICATION_JSON);
+            request.responder(response -> {
+                response.code(200);
+                response.content(createdUser, APPLICATION_JSON);
+            });
+        }));
+
+        JavaUserClient client = new JavaUserClient(server.getHttpUrl());
+
+        JavaUser user = client.create(inputUser);
+
+        assertEquals(user, createdUser);
+
+        assertTrue(server.verify());
     }
 }

@@ -71,10 +71,11 @@ public class JavaUser {
     }
 
     public String toJson() {
-        return format("{\"id\":\"%d\", \"username\":\"%s\", \"email\":\"%s\"}", id, username, email);
+        return format("{\"id\":%d, \"username\":\"%s\", \"email\":\"%s\"}", id, username, email);
     }
 
     static JavaUser fromJson(final Map<String, Object> json) {
-        return new JavaUser(parseLong((String) json.get("id")), (String) json.get("username"), (String) json.get("email"));
+        Object id = json.get("id");
+        return new JavaUser(id != null ? parseLong(id.toString()) : null, (String) json.get("username"), (String) json.get("email"));
     }
 }
