@@ -1,0 +1,3 @@
+rootProject.name='rest-dev'
+
+include 'groovy-version', 'java-version'

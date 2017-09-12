@@ -1,0 +1,15 @@
+plugins {
+    id 'java'
+}
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    compile 'org.codehaus.groovy:groovy-all:2.4.11'
+    compile 'io.github.http-builder-ng:http-builder-ng-core:0.18.0'
+
+    testCompile 'junit:junit:4.12'
+    testCompile 'com.stehno.ersatz:ersatz:1.5.0'
+}
