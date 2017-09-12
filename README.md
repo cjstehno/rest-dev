@@ -16,6 +16,10 @@ The `groovy-version` directory contains the Groovy version of the project code, 
 
 The `java-version` directory contains the Java version of the same project code, as a bonus for the interested.
 
+## Kotlin Version
+
+The `kotlin-version` directory contains the Kotlin version of the project... this is currently still a work in progress and may not represent _good_ Kotlin code.
+
 ## License
 
 ```

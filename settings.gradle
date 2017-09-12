@@ -1,3 +1,3 @@
 rootProject.name='rest-dev'
 
-include 'groovy-version', 'java-version'
+include 'groovy-version', 'java-version', 'kotlin-version'
