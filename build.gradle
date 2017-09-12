@@ -1,16 +1,3 @@
-plugins {
-    id 'groovy'
-}
-
-repositories {
-    mavenLocal()
-    jcenter()
-}
-
-dependencies {
-    compile 'org.codehaus.groovy:groovy-all:2.4.11'
-    compile 'io.github.http-builder-ng:http-builder-ng-core:0.18.0'
-
-    testCompile 'org.spockframework:spock-core:1.1-groovy-2.4'
-    testCompile 'com.stehno.ersatz:ersatz:1.5.0'
-}
+/*
+    Nothing to see here, please move along.
+ */
