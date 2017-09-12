@@ -18,7 +18,7 @@ The `java-version` directory contains the Java version of the same project code,
 
 ## Kotlin Version
 
-The `kotlin-version` directory contains the Kotlin version of the project... this is currently still a work in progress and may not represent _good_ Kotlin code.
+The `kotlin-version` directory contains the Kotlin version of the project. Yep, they both work great with Kotlin too! (Note: I am new to Kotlin so the code may not be "good" Kotlin)
 
 ## License
 
